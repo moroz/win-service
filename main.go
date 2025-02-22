@@ -63,7 +63,9 @@ func runService(name string, isDebug bool) {
 
 var DEBUG = os.Getenv("DEBUG") != ""
 
-func main() {
+const SERVICE_NAME = "moroz-winservice"
+
+func setupLog() *os.File {
 	pwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -74,8 +76,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("error opening file: %s", err)
 	}
+	log.SetOutput(f)
+	return f
+}
+
+func main() {
+	f := setupLog()
 	defer f.Close()
 
-	log.SetOutput(f)
-	runService("moroz-testservice", DEBUG)
+	inService, err := svc.IsWindowsService()
+	if err != nil {
+		log.Fatalf("Failed to determine if running within Windows service: %s", err)
+	}
+	if inService {
+		runService(SERVICE_NAME, false)
+		return
+	}
 }
