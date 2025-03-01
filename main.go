@@ -2,9 +2,9 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"path"
-	"time"
 
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/debug"
@@ -14,8 +14,6 @@ type handler struct{}
 
 func (h *handler) Execute(args []string, r <-chan svc.ChangeRequest, status chan<- svc.Status) (bool, uint32) {
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown | svc.AcceptPauseAndContinue
-	tick := time.NewTicker(10 * time.Second)
-	// tick := time.Tick(10 * time.Second)
 	status <- svc.Status{State: svc.StartPending}
 	status <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 
@@ -25,8 +23,6 @@ func (h *handler) Execute(args []string, r <-chan svc.ChangeRequest, status chan
 
 	for {
 		select {
-		case <-tick.C:
-			log.Print("Tick handled!")
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Interrogate:
@@ -36,10 +32,8 @@ func (h *handler) Execute(args []string, r <-chan svc.ChangeRequest, status chan
 				return false, 1
 			case svc.Pause:
 				status <- svc.Status{State: svc.Paused, Accepts: cmdsAccepted}
-				tick.Stop()
 			case svc.Continue:
 				status <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
-				tick = time.NewTicker(10 * time.Second)
 			default:
 				log.Printf("Unexpected service control request #%d", c)
 			}
@@ -89,12 +83,20 @@ func main() {
 	f := setupLog()
 	defer f.Close()
 
+	r := NewRouter()
+
 	inService, err := svc.IsWindowsService()
 	if err != nil {
 		log.Fatalf("Failed to determine if running within Windows service: %s", err)
 	}
+
 	if inService {
+		log.Printf("Starting service %s", SERVICE_NAME)
+		go func() {
+			log.Fatal(http.ListenAndServe(":3000", r))
+		}()
 		runService(SERVICE_NAME, false)
-		return
 	}
+
+	log.Fatal(http.ListenAndServe(":3000", r))
 }
