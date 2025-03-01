@@ -19,7 +19,10 @@ func (h *handler) Execute(args []string, r <-chan svc.ChangeRequest, status chan
 	status <- svc.Status{State: svc.StartPending}
 	status <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 
-loop:
+	defer func() {
+		status <- svc.Status{State: svc.StopPending}
+	}()
+
 	for {
 		select {
 		case <-tick.C:
@@ -30,7 +33,7 @@ loop:
 				status <- c.CurrentStatus
 			case svc.Stop, svc.Shutdown:
 				log.Print("Shutting down...")
-				break loop
+				return false, 1
 			case svc.Pause:
 				status <- svc.Status{State: svc.Paused, Accepts: cmdsAccepted}
 				tick.Stop()
@@ -42,9 +45,6 @@ loop:
 			}
 		}
 	}
-
-	status <- svc.Status{State: svc.StopPending}
-	return false, 1
 }
 
 func runService(name string, isDebug bool) {
@@ -70,6 +70,11 @@ func setupLog() *os.File {
 	if err != nil {
 		log.Fatal(err)
 	}
+	err = os.MkdirAll("./log", 0o755)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	logFile := path.Join(pwd, `log/debug.log`)
 
 	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
